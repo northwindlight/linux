@@ -2074,9 +2074,14 @@ static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
 	sc = FASTRPC_SCALARS(FASTRPC_RMID_INIT_MEM_MAP, 3, 1);
 	err = fastrpc_internal_invoke(fl, true, FASTRPC_INIT_HANDLE, sc, &args[0]);
 	if (err) {
-		dev_err(dev, "mem mmap error, fd %d, vaddr %llx, size %lld, err %d\n",
-			req.fd, req.vaddrin, map->len, err);
-		goto err_invoke;
+	    if (err == 0x80000414) {
+	        dev_warn(dev, "DSP firmware does not support INIT_MEM_MAP, skipping\n");
+	        err = 0;
+	    } else {
+	        dev_err(dev, "mem mmap error, fd %d, vaddr %llx, size %lld, err %d\n",
+	            req.fd, req.vaddrin, map->len, err);
+	        goto err_invoke;
+	    }
 	}
 
 	/* update the buffer to be able to deallocate the memory on the DSP */
