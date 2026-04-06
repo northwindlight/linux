@@ -2428,9 +2428,10 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	/* No invocations past this point */
 	spin_lock_irqsave(&cctx->lock, flags);
 	cctx->rpdev = NULL;
+	spin_unlock_irqrestore(&cctx->lock, flags);
 	list_for_each_entry(user, &cctx->users, user)
 		fastrpc_notify_users(user);
-	spin_unlock_irqrestore(&cctx->lock, flags);
+	
 
 	if (cctx->fdevice)
 		misc_deregister(&cctx->fdevice->miscdev);
