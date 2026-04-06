@@ -438,9 +438,6 @@ static int fastrpc_buf_alloc(struct fastrpc_user *fl, struct device *dev,
 
 	buf = *obuf;
 
-	if (fl->sctx && fl->sctx->sid)
-		buf->phys += ((u64)fl->sctx->sid << 32);
-
 	return 0;
 }
 
@@ -788,7 +785,6 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 		map->phys = sg_phys(map->table->sgl);
 	} else {
 		map->phys = sg_dma_address(map->table->sgl);
-		map->phys += ((u64)fl->sctx->sid << 32);
 	}
 	for_each_sg(map->table->sgl, sgl, map->table->nents,
 		sgl_index)
@@ -1016,7 +1012,6 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 			if (vma)
 				pages[i].addr += (ctx->args[i].ptr & PAGE_MASK) -
 						 vma->vm_start;
-			pages[i].addr &= 0xFFFFFFFFULL;
 			mmap_read_unlock(current->mm);
 
 			pg_start = (ctx->args[i].ptr & PAGE_MASK) >> PAGE_SHIFT;
@@ -1040,7 +1035,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 			pages[i].addr = ctx->buf->phys -
 					ctx->olaps[oix].offset +
 					(pkt_size - rlen);
-			pages[i].addr = (pages[i].addr & 0xFFFFFFFFULL) & PAGE_MASK;
+			pages[i].addr = (pages[i].addr ) & PAGE_MASK;
 
 			pg_start = (rpra[i].buf.pv & PAGE_MASK) >> PAGE_SHIFT;
 			pg_end = ((rpra[i].buf.pv + len - 1) & PAGE_MASK) >> PAGE_SHIFT;
@@ -1151,7 +1146,7 @@ static int fastrpc_invoke_send(struct fastrpc_session_ctx *sctx,
 	msg->ctx = ctx->ctxid | fl->pd;
 	msg->handle = handle;
 	msg->sc = ctx->sc;
-	msg->addr = ctx->buf ? (ctx->buf->phys & 0xFFFFFFFFULL) : 0;
+	msg->addr = ctx->buf ? (ctx->buf->phys ) : 0;
 	msg->size = roundup(ctx->msg_sz, PAGE_SIZE);
 	fastrpc_context_get(ctx);
 
@@ -1333,7 +1328,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 	args[1].length = inbuf.namelen;
 	args[1].fd = -1;
 
-	pages[0].addr = fl->cctx->remote_heap->phys & 0xFFFFFFFFULL;
+	pages[0].addr = fl->cctx->remote_heap->phys ;
 	pages[0].size = fl->cctx->remote_heap->size;
 
 	args[2].ptr = (u64)(uintptr_t) pages;
@@ -1455,7 +1450,7 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 	args[2].length = inbuf.filelen;
 	args[2].fd = init.filefd;
 
-	pages[0].addr = imem->phys & 0xFFFFFFFFULL;
+	pages[0].addr = imem->phys ;
 	pages[0].size = imem->size;
 
 	args[3].ptr = (u64)(uintptr_t) pages;
@@ -1913,7 +1908,7 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 	args[0].ptr = (u64) (uintptr_t) &req_msg;
 	args[0].length = sizeof(req_msg);
 
-	pages.addr = buf->phys & 0xFFFFFFFFULL;
+	pages.addr = buf->phys ;
 	pages.size = buf->size;
 
 	args[1].ptr = (u64) (uintptr_t) &pages;
@@ -2059,7 +2054,7 @@ static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
 	args[0].ptr = (u64) (uintptr_t) &req_msg;
 	args[0].length = sizeof(req_msg);
 
-	pages.addr = map->phys & 0xFFFFFFFFULL;
+	pages.addr = map->phys ;
 	pages.size = map->len;
 
 	args[1].ptr = (u64) (uintptr_t) &pages;
