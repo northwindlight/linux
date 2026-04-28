@@ -23,6 +23,8 @@
 #include <linux/stmmac.h>
 
 #include "stmmac.h"
+#include "dwmac_dma.h"
+#include "common.h"
 #include "stmmac_platform.h"
 
 /* General notes on dwmac-sun8i:
@@ -49,6 +51,7 @@ struct emac_variant {
 	bool support_mii;
 	bool support_rmii;
 	bool support_rgmii;
+	bool soc_has_enhanced_desc;
 	u8 rx_delay_max;
 	u8 tx_delay_max;
 };
@@ -94,6 +97,7 @@ static const struct emac_variant emac_variant_h3 = {
 	.support_mii = true,
 	.support_rmii = true,
 	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
 	.rx_delay_max = 31,
 	.tx_delay_max = 7,
 };
@@ -101,7 +105,8 @@ static const struct emac_variant emac_variant_h3 = {
 static const struct emac_variant emac_variant_v3s = {
 	.syscon_field = &sun8i_syscon_reg_field,
 	.soc_has_internal_phy = true,
-	.support_mii = true
+	.support_mii = true,
+	.soc_has_enhanced_desc = true
 };
 
 static const struct emac_variant emac_variant_a83t = {
@@ -109,6 +114,7 @@ static const struct emac_variant emac_variant_a83t = {
 	.soc_has_internal_phy = false,
 	.support_mii = true,
 	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
 	.rx_delay_max = 31,
 	.tx_delay_max = 7,
 };
@@ -117,6 +123,7 @@ static const struct emac_variant emac_variant_r40 = {
 	.syscon_field = &sun8i_ccu_reg_field,
 	.support_mii = true,
 	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
 	.rx_delay_max = 7,
 };
 
@@ -126,6 +133,18 @@ static const struct emac_variant emac_variant_a64 = {
 	.support_mii = true,
 	.support_rmii = true,
 	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
+	.rx_delay_max = 31,
+	.tx_delay_max = 7,
+};
+
+static const struct emac_variant emac_variant_d1 = {
+	.syscon_field = NULL,
+	.soc_has_internal_phy = false,
+	.support_mii = true,
+	.support_rmii = true,
+	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
 	.rx_delay_max = 31,
 	.tx_delay_max = 7,
 };
@@ -139,6 +158,7 @@ static const struct emac_variant emac_variant_h6 = {
 	.support_mii = true,
 	.support_rmii = true,
 	.support_rgmii = true,
+	.soc_has_enhanced_desc = true,
 	.rx_delay_max = 31,
 	.tx_delay_max = 7,
 };
@@ -551,6 +571,46 @@ static void sun8i_dwmac_dma_operation_mode_tx(struct stmmac_priv *priv,
 	writel(v, ioaddr + EMAC_TX_CTL1);
 }
 
+static int sun8i_dwmac_get_hw_feature(void __iomem *ioaddr,
+				       struct dma_features *dma_cap)
+{
+	u32 hw_cap = readl(ioaddr + DMA_HW_FEATURE);
+
+	if (!hw_cap)
+		return -EOPNOTSUPP;
+
+	dma_cap->mbps_10_100 = (hw_cap & DMA_HW_FEAT_MIISEL);
+	dma_cap->mbps_1000 = (hw_cap & DMA_HW_FEAT_GMIISEL) >> 1;
+	dma_cap->half_duplex = (hw_cap & DMA_HW_FEAT_HDSEL) >> 2;
+	dma_cap->hash_filter = (hw_cap & DMA_HW_FEAT_HASHSEL) >> 4;
+	dma_cap->multi_addr = (hw_cap & DMA_HW_FEAT_ADDMAC) >> 5;
+	dma_cap->pcs = (hw_cap & DMA_HW_FEAT_PCSSEL) >> 6;
+	dma_cap->sma_mdio = (hw_cap & DMA_HW_FEAT_SMASEL) >> 8;
+	dma_cap->pmt_remote_wake_up = (hw_cap & DMA_HW_FEAT_RWKSEL) >> 9;
+	dma_cap->pmt_magic_frame = (hw_cap & DMA_HW_FEAT_MGKSEL) >> 10;
+	dma_cap->rmon = (hw_cap & DMA_HW_FEAT_MMCSEL) >> 11;
+	dma_cap->time_stamp =
+	    (hw_cap & DMA_HW_FEAT_TSVER1SEL) >> 12;
+	dma_cap->atime_stamp =
+	    (hw_cap & DMA_HW_FEAT_TSVER2SEL) >> 13;
+	dma_cap->eee = (hw_cap & DMA_HW_FEAT_EEESEL) >> 14;
+	dma_cap->av = (hw_cap & DMA_HW_FEAT_AVSEL) >> 15;
+	dma_cap->tx_coe = (hw_cap & DMA_HW_FEAT_TXCOESEL) >> 16;
+	dma_cap->rx_coe_type1 =
+	    (hw_cap & DMA_HW_FEAT_RXTYP1COE) >> 17;
+	dma_cap->rx_coe_type2 =
+	    (hw_cap & DMA_HW_FEAT_RXTYP2COE) >> 18;
+	dma_cap->rxfifo_over_2048 =
+	    (hw_cap & DMA_HW_FEAT_RXFIFOSIZE) >> 19;
+	dma_cap->number_rx_channel =
+	    (hw_cap & DMA_HW_FEAT_RXCHCNT) >> 20;
+	dma_cap->number_tx_channel =
+	    (hw_cap & DMA_HW_FEAT_TXCHCNT) >> 22;
+	dma_cap->enh_desc = (hw_cap & DMA_HW_FEAT_ENHDESSEL) >> 24;
+
+	return 0;
+}
+
 static const struct stmmac_dma_ops sun8i_dwmac_dma_ops = {
 	.reset = sun8i_dwmac_dma_reset,
 	.init = sun8i_dwmac_dma_init,
@@ -567,6 +627,7 @@ static const struct stmmac_dma_ops sun8i_dwmac_dma_ops = {
 	.start_rx = sun8i_dwmac_dma_start_rx,
 	.stop_rx = sun8i_dwmac_dma_stop_rx,
 	.dma_interrupt = sun8i_dwmac_dma_interrupt,
+	.get_hw_feature = sun8i_dwmac_get_hw_feature,
 };
 
 static int sun8i_dwmac_power_internal_phy(struct stmmac_priv *priv);
@@ -924,6 +985,9 @@ static int sun8i_dwmac_set_syscon(struct device *dev,
 	int ret;
 	u32 reg = 0, val;
 
+	if (!gmac->variant->syscon_field)
+		return 0;
+
 	if (gmac->variant->soc_has_internal_phy) {
 		if (of_property_read_bool(node, "allwinner,leds-active-low"))
 			reg |= H3_EPHY_LED_POL;
@@ -1000,6 +1064,9 @@ static int sun8i_dwmac_set_syscon(struct device *dev,
 
 static void sun8i_dwmac_unset_syscon(struct sunxi_priv_data *gmac)
 {
+	if (!gmac->variant->syscon_field)
+		return;
+
 	if (gmac->variant->soc_has_internal_phy)
 		regmap_field_write(gmac->regmap_field,
 				   (H3_EPHY_SHUTDOWN | H3_EPHY_SELECT));
@@ -1071,6 +1138,13 @@ static int sun8i_dwmac_setup(void *ppriv, struct mac_device_info *mac)
 	mac->mii.clk_csr_mask = GENMASK(22, 20);
 	mac->unicast_filter_entries = 8;
 
+	{
+		struct sunxi_priv_data *gmac = priv->plat->bsp_priv;
+
+		if (gmac->variant->soc_has_enhanced_desc)
+			priv->plat->enh_desc = 1;
+	}
+
 	/* Synopsys Id is not available */
 	priv->synopsys_id = 0;
 
@@ -1139,39 +1213,30 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 		gmac->regulator = NULL;
 	}
 
-	/* The "GMAC clock control" register might be located in the
-	 * CCU address range (on the R40), or the system control address
-	 * range (on most other sun8i and later SoCs).
-	 *
-	 * The former controls most if not all clocks in the SoC. The
-	 * latter has an SoC identification register, and on some SoCs,
-	 * controls to map device specific SRAM to either the intended
-	 * peripheral, or the CPU address space.
-	 *
-	 * In either case, there should be a coordinated and restricted
-	 * method of accessing the register needed here. This is done by
-	 * having the device export a custom regmap, instead of a generic
-	 * syscon, which grants all access to all registers.
-	 *
-	 * To support old device trees, we fall back to using the syscon
-	 * interface if possible.
-	 */
-	regmap = sun8i_dwmac_get_syscon_from_dev(pdev->dev.of_node);
-	if (IS_ERR(regmap))
-		regmap = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
-							 "syscon");
-	if (IS_ERR(regmap)) {
-		ret = PTR_ERR(regmap);
-		dev_err(&pdev->dev, "Unable to map syscon: %d\n", ret);
-		return ret;
-	}
+	if (gmac->variant->syscon_field) {
+		/* The "GMAC clock control" register might be located in
+		 * the CCU address range (on the R40), or the system control
+		 * address range (on most other sun8i and later SoCs). For
+		 * SoCs like D1, the syscon field is not applicable.
+		 */
+		regmap = sun8i_dwmac_get_syscon_from_dev(pdev->dev.of_node);
+		if (IS_ERR(regmap))
+			regmap = syscon_regmap_lookup_by_phandle(
+					pdev->dev.of_node, "syscon");
+		if (IS_ERR(regmap)) {
+			ret = PTR_ERR(regmap);
+			dev_err(&pdev->dev, "Unable to map syscon: %d\n", ret);
+			return ret;
+		}
 
-	gmac->regmap_field = devm_regmap_field_alloc(dev, regmap,
-						     *gmac->variant->syscon_field);
-	if (IS_ERR(gmac->regmap_field)) {
-		ret = PTR_ERR(gmac->regmap_field);
-		dev_err(dev, "Unable to map syscon register: %d\n", ret);
-		return ret;
+		gmac->regmap_field = devm_regmap_field_alloc(dev, regmap,
+					*gmac->variant->syscon_field);
+		if (IS_ERR(gmac->regmap_field)) {
+			ret = PTR_ERR(gmac->regmap_field);
+			dev_err(dev, "Unable to map syscon register: %d\n",
+				ret);
+			return ret;
+		}
 	}
 
 	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
@@ -1277,6 +1342,8 @@ static const struct of_device_id sun8i_dwmac_match[] = {
 		.data = &emac_variant_a83t },
 	{ .compatible = "allwinner,sun8i-r40-gmac",
 		.data = &emac_variant_r40 },
+	{ .compatible = "allwinner,sun20i-d1-emac",
+		.data = &emac_variant_d1 },
 	{ .compatible = "allwinner,sun50i-a64-emac",
 		.data = &emac_variant_a64 },
 	{ .compatible = "allwinner,sun50i-h6-emac",
